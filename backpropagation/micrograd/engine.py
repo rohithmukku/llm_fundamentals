@@ -1,8 +1,10 @@
 class Value:
-    def __init__(self, data, op = ''):
+    def __init__(self, data, op = '', children=()):
         self.data = data
-        self.op = op
+        self._op = op
         self.grad = 0
+        self._children = set(children)
+        self._backward = lambda: None
 
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"
@@ -11,7 +13,13 @@ class Value:
         other = Value(other) if not isinstance(other, Value) else other
 
         ret = self.data + other.data
-        ret = Value(ret, '+')
+        ret = Value(ret, '+', (self, other))
+
+        def _backward():
+            self.grad += ret.grad
+            other.grad += ret.grad
+    
+        ret._backward = _backward
 
         return ret
 
@@ -19,7 +27,13 @@ class Value:
         other = Value(other) if not isinstance(other, Value) else other
 
         ret = self.data * other.data
-        ret = Value(ret, '*')
+        ret = Value(ret, '*', (self, other))
+
+        def _backward():
+            self.grad += other.data * ret.grad
+            other.grad += self.data * ret.grad
+        
+        ret._backward = _backward
 
         return ret
 
@@ -46,4 +60,29 @@ class Value:
 
     def __pow__(self, other):
         assert isinstance(other, (int, float)), "only int/float powers for now"
-        return Value(self.data ** other, '**')
+        
+        ret = self.data ** other
+        ret = Value(ret, '**', (self,))
+
+        def _backward():
+            self.grad += other * (self.data ** (other - 1)) * ret.grad
+        
+        ret._backward = _backward
+
+        return ret
+
+    def backward(self):
+        visited = set()
+        array = []
+        def dfs(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._children:
+                    dfs(child)
+                array.append(v)
+        
+        dfs(self)
+
+        self.grad = 1
+        for node in reversed(array):
+            node._backward()
