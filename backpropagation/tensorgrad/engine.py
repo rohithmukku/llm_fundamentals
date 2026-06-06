@@ -183,6 +183,21 @@ class Matrix:
         ret._backward = _backward
         return ret
 
+    def exp(self):
+        result = np.exp(self.data)
+        ret = Matrix(result, 'exp', (self,))
+        def _backward():
+            self.grad += result * ret.grad   # d/dx exp(x) = exp(x)
+        ret._backward = _backward
+        return ret
+
+    def log(self):
+        ret = Matrix(np.log(self.data), 'log', (self,))
+        def _backward():
+            self.grad += ret.grad / self.data  # d/dx log(x) = 1/x
+        ret._backward = _backward
+        return ret
+
     def backward(self):
         visited = set()
         array = []
