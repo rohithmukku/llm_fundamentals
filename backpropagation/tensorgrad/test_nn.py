@@ -2,8 +2,8 @@ import pytest
 import numpy as np
 import torch
 import torch.nn as tnn          # was: import torch.nn as nn
-from engine import Matrix
-from nn import MLP
+from tensorgrad.engine import Matrix
+from tensorgrad.nn import MLP
 
 RNG = np.random.default_rng(42)
 def rand(*shape): return RNG.standard_normal(shape)

@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import torch
-from engine import Matrix   # adjust path if needed: from tensorgrad.engine import Matrix
+from tensorgrad.engine import Matrix
 
 
 # ─────────────────────────────────────────────────────────────────────────────

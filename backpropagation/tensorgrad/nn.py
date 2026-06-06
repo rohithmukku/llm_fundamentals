@@ -1,5 +1,5 @@
 import random
-from engine import Matrix
+from tensorgrad.engine import Matrix
 import numpy as np
 
 class Module:
@@ -12,7 +12,8 @@ class Module:
 
 class LinearLayer(Module):
     def __init__(self, in_shape, out_shape):
-        W = [[random.uniform(-1, 1) for _ in range(out_shape)] for _ in range(in_shape)]
+        # W = [[random.uniform(-1, 1) for _ in range(out_shape)] for _ in range(in_shape)]
+        W = np.random.randn(in_shape, out_shape) * np.sqrt(1.0 / in_shape)  # need He/Kaiming init for stability
         self.W = Matrix(W) # (in_shape, out_shape)
         self.b = Matrix([0 for _ in range(out_shape)]) # (out_shape)
 
