@@ -28,3 +28,17 @@ step  800  loss 1.1132
 step  900  loss 1.0280
 val accuracy: 0.9096  (9096/10000)
 ```
+
+## Attention from scratch
+
+Implemented scaled dot-product attention using tensorgrad's autograd engine, 
+including batched matmul backward, softmax, and transpose with proper 
+gradient flow. All gradients verified element-wise against PyTorch.
+
+```
+python -m backpropagation.tensorgrad.attention
+x grad match: True
+W_q grad match: True
+W_k grad match: True
+W_v grad match: True
+```
