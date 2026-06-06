@@ -18,7 +18,19 @@ class Matrix:
 
     @property
     def T(self):
-        return np.transpose(self.data)
+        return self.transpose(-2, -1)
+
+    def transpose(self, dim1, dim2):
+        axes = list(range(self.data.ndim))
+        axes[dim1], axes[dim2] = axes[dim2], axes[dim1]
+        ret = Matrix(np.transpose(self.data, axes), 'transpose', (self,))
+        def _backward():
+            # transpose is its own inverse
+            inv_axes = list(range(ret.grad.ndim))
+            inv_axes[dim1], inv_axes[dim2] = inv_axes[dim2], inv_axes[dim1]
+            self.grad += np.transpose(ret.grad, inv_axes)
+        ret._backward = _backward
+        return ret
 
     def __repr__(self):
         return f"Tensor(shape={self.data.shape}, op='{self.op}')"
@@ -79,14 +91,19 @@ class Matrix:
         if not isinstance(other, Matrix):
             other = Matrix(other)
 
-        assert self.data.shape[1] == other.data.shape[0], "Matrices columns, rows should match"
+        assert self.data.shape[-1] == other.data.shape[-2], "Matrices columns, rows should match"
 
         ret = self.data @ other.data
         ret = Matrix(ret, '@', (self, other))
 
         def _backward():
-            self.grad += ret.grad @ other.T
-            other.grad += self.T @ ret.grad
+            other_T = np.swapaxes(other.data, -2, -1)
+            self_T = np.swapaxes(self.data, -2, -1)
+            grad_self = ret.grad @ other_T
+            grad_other = self_T @ ret.grad
+            # unbroadcast over batch dims if needed
+            self.grad += self._unbroadcast(grad_self, self.shape)
+            other.grad += self._unbroadcast(grad_other, other.shape)
         ret._backward = _backward
 
         return ret
@@ -137,8 +154,8 @@ class Matrix:
     def __neg__(self):
         return self * -1
 
-    def sum(self, axis=None):
-        ret = Matrix(self.data.sum(axis=axis), 'sum', (self,))
+    def sum(self, axis=None, keepdims=False):
+        ret = Matrix(self.data.sum(axis=axis, keepdims=keepdims), 'sum', (self,))
         def _backward():
             # grad flows back to every element that was summed,
             # so broadcast it back out to self.shape
@@ -146,9 +163,10 @@ class Matrix:
                 self.grad += np.broadcast_to(ret.grad, self.shape)
             else:
                 # re-insert the axis that sum() collapsed so broadcast works
-                self.grad += np.broadcast_to(
-                    np.expand_dims(ret.grad, axis=axis), self.shape
-                )
+                grad = ret.grad
+                if not keepdims:
+                    grad = np.expand_dims(grad, axis=axis)
+                self.grad += np.broadcast_to(grad, self.shape)
         ret._backward = _backward
         return ret
 
@@ -197,6 +215,13 @@ class Matrix:
             self.grad += ret.grad / self.data  # d/dx log(x) = 1/x
         ret._backward = _backward
         return ret
+
+    def softmax(self, axis):
+        m_val = np.max(self.data, axis=axis, keepdims=True)
+        shifted = self + Matrix(-m_val)  # subtraction
+        exp_x = shifted.exp()
+        s = exp_x.sum(axis=axis, keepdims=True)
+        return exp_x / s
 
     def backward(self):
         visited = set()
