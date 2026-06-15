@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from block import Block
-from config import ModelConfig
+from .block import Block
+from .config import ModelConfig
 
 class GPT2(nn.Module):
     def __init__(self, config: ModelConfig, vocab_size: int):
@@ -22,8 +22,8 @@ class GPT2(nn.Module):
     def forward(self, input_ids, targets=None):
         B, T = input_ids.size()
 
-        if T >= self.config.max_seq_len:
-            print("Sequence Length exceeded!")
+        if T > self.config.max_seq_len:
+            raise ValueError(f"Sequence length {T} exceeds max_seq_len {self.config.max_seq_len}")
 
         pos = torch.arange(T, device=input_ids.device)  # T
         tok_emb = self.token_embedding(input_ids)       # B, T, D

@@ -1,5 +1,5 @@
-from attention import CausalSelfAttention
-from config import ModelConfig
+from .attention import CausalSelfAttention
+from .config import ModelConfig
 import torch.nn as nn
 import torch
 

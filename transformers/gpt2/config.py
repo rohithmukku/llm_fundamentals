@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 
 @dataclass
-class TrainingConfig:
+class TrainerConfig:
+    seed: int = 8
     steps: int = 1000
-    dropout: float = 0.2
+    batch_size: int = 32
+    lr: float = 3e-4
+    grad_norm_clip: float = 1.0
+    log_step: int = 100
 
 @dataclass
 class ModelConfig:
