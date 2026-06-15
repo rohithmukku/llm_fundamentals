@@ -18,3 +18,4 @@ class ModelConfig:
     dropout: float = 0.2
     bias: bool = False
     use_torch_dot_product: bool = True
+    use_rope: bool = True

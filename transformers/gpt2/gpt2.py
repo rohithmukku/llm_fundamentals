@@ -11,7 +11,8 @@ class GPT2(nn.Module):
         self.vocab_size = vocab_size
 
         self.token_embedding = nn.Embedding(vocab_size, config.n_embed)
-        self.position_embedding = nn.Embedding(config.max_seq_len, config.n_embed)
+        if not config.use_rope:
+            self.position_embedding = nn.Embedding(config.max_seq_len, config.n_embed)
         self.dropout = nn.Dropout(config.dropout)
         self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layers)])
         self.ln = nn.LayerNorm(config.n_embed, bias=config.bias)
@@ -27,9 +28,12 @@ class GPT2(nn.Module):
 
         pos = torch.arange(T, device=input_ids.device)  # T
         tok_emb = self.token_embedding(input_ids)       # B, T, D
-        pos_emb = self.position_embedding(pos)          # T, D
 
-        x = self.dropout(tok_emb + pos_emb)
+        if not self.config.use_rope:
+            pos_emb = self.position_embedding(pos)          # T, D
+            x = self.dropout(tok_emb + pos_emb)
+        else:
+            x = self.dropout(tok_emb)
 
         for block in self.blocks:
             x = block(x)

@@ -3,6 +3,7 @@ import math
 import torch.nn as nn
 import torch.nn.functional as F
 from .config import ModelConfig
+from .embedding import RotaryEmbedding
 
 # B: Batch size
 # T: Sequence Length
@@ -19,8 +20,14 @@ class CausalSelfAttention(nn.Module):
         self.dropout = config.dropout
         self.bias = config.bias
         self.use_torch_dot_product = config.use_torch_dot_product
+        self.use_rope = config.use_rope
 
         self.attention = nn.Linear(self.n_embed, self.n_embed * 3, bias=self.bias)
+
+        if self.use_rope:
+            self.rope = RotaryEmbedding(config.max_seq_len, config.n_embed // config.n_heads)
+        else:
+            self.rope = nn.Identity()
 
         self.attn_dropout = nn.Dropout(self.dropout)
         self.resid_dropout = nn.Dropout(self.dropout)
@@ -40,6 +47,10 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
         k = k.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
         v = v.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
+
+        # Apply RoPE transformation
+        q = self.rope(q)
+        k = self.rope(k)
 
         if self.use_torch_dot_product:
             o = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0, is_causal=True)

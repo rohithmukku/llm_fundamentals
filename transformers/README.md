@@ -42,7 +42,7 @@ python train.py --mode eval --n_embed 384 --n_heads 6 --n_layers 6 \
 
 ## TODO
 
-- [ ] RoPE positional encoding
+- [x] RoPE positional encoding
 - [ ] BPE tokenizer
 
 ## Structure
