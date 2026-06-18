@@ -6,7 +6,7 @@ GPT-2 implemented from scratch in PyTorch, trained on TinyShakespeare. No Huggin
 
 - Decoder-only transformer (GPT-2 style)
 - Causal self-attention with pre-LayerNorm
-- Learned positional embeddings (RoPE in progress)
+- RoPE positional encoding (configurable via `use_rope` flag)
 - Character-level tokenization (vocab size: 65)
 
 Default small config (~10M params):
@@ -39,6 +39,30 @@ python train.py --n_embed 384 --n_heads 6 --n_layers 6 \
 python train.py --mode eval --n_embed 384 --n_heads 6 --n_layers 6 \
   --max_seq_len 256
 ```
+
+## KV Cache Benchmark
+
+Dynamic KV cache implemented in `gpt2/attention.py`. Benchmarked on small config (384 embed, 6 layers, prompt=32 tokens):
+
+| New tokens | No cache (s) | KV cache (s) | Speedup |
+|---|---|---|---|
+| 32  | 0.210 | 0.077 | 2.71x |
+| 64  | 0.460 | 0.151 | 3.05x |
+| 128 | 1.170 | 0.318 | 3.68x |
+| 256 | 3.845 | 0.805 | 4.78x |
+
+Speedup grows with sequence length — consistent with the O(T²) → O(T) reduction in attention compute.
+
+**Apple MPS (same config):**
+
+| New tokens | No cache (s) | KV cache (s) | Speedup |
+|---|---|---|---|
+| 32  | 0.317 | 0.260 | 1.22x |
+| 64  | 0.366 | 0.552 | 0.66x |
+| 128 | 0.878 | 1.232 | 0.71x |
+| 256 | 2.122 | 3.168 | 0.67x |
+
+**Why MPS regresses:** MPS has high per-op dispatch overhead. The dynamic KV cache calls `torch.cat` every step, allocating a new growing tensor each time. On CPU/CUDA this overhead is negligible; on MPS it dominates and outweighs the compute savings. Production systems (vLLM, TGI, SGLang) use pre-allocated static buffers to avoid allocations in the hot loop entirely.
 
 ## TODO
 
