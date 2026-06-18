@@ -51,6 +51,29 @@ class GPT2(nn.Module):
 
         return logits, loss
 
+    @torch.no_grad()
+    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None):
+        for _ in range(max_new_tokens):
+            idx = idx if idx.shape[1] <= self.config.max_seq_len else idx[:,:self.config.max_seq_len]
+            logits, _ = self.forward(idx)
+            logits = logits[:, -1, :] / temperature             # B, V
+
+            if top_k is not None:
+                v, _ = torch.topk(logits, top_k)
+                logits[logits < v[:, [-1]]] = -float('Inf')     # v[:, [-1]] instead of v[:, -1] preserve dimension as (B, 1)
+
+            probs = F.softmax(logits, dim=-1)
+            if do_sample:
+                pred = torch.multinomial(probs, num_samples=1)
+            else:
+                _, pred = torch.topk(logits, 1)
+
+            idx = torch.cat((idx, pred), dim=-1)
+            
+        return idx
+
+
+
 def test_gpt2():
     config = ModelConfig(
         n_embed=128, n_heads=4, n_layers=4,
