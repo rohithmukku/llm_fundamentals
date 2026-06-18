@@ -11,11 +11,12 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(config.n_embed, bias=config.bias)
         self.mlp = MLP(config)
 
-    def forward(self, x):
-        x = x + self.attention(self.ln_1(x))
+    def forward(self, x, past_kv=None):
+        o, kv = self.attention(self.ln_1(x), past_kv)
+        x = x + o
         x = x + self.mlp(self.ln_2(x))
 
-        return x
+        return x, kv
 
 class MLP(nn.Module):
     def __init__(self, config: ModelConfig):

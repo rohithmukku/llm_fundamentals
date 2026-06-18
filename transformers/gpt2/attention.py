@@ -38,22 +38,40 @@ class CausalSelfAttention(nn.Module):
             self.register_buffer("causal_mask", torch.tril(torch.ones(self.max_seq_len, self.max_seq_len)).view(1, 1, self.max_seq_len, self.max_seq_len))
         
 
-    def forward(self, x):
+    def forward(self, x, past_kv=None):
         # x: (B, T, D)
         B, T, D = x.size()
-        q, k, v = torch.split(self.attention(x), self.n_embed, dim=2) # split along D
 
-        # q, k, v: (B, nH, T, nD)
-        q = q.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
-        k = k.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
-        v = v.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
+        if past_kv is None:
+            q, k, v = torch.split(self.attention(x), self.n_embed, dim=2) # split along D
+            # q, k, v: (B, nH, T, nD)
+            q = q.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
+            k = k.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
+            v = v.view(B, T, self.n_heads, D // self.n_heads).transpose(1, 2)
 
-        # Apply RoPE transformation
-        q = self.rope(q)
-        k = self.rope(k)
+            # Apply RoPE transformation
+            q = self.rope(q)
+            k = self.rope(k)
+        else:
+            k_cached, v_cached = past_kv
+            q, k, v = torch.split(self.attention(x[:,[-1],:]), self.n_embed, dim=2)
+
+            q = q.view(B, 1, self.n_heads, D // self.n_heads).transpose(1, 2)
+            k = k.view(B, 1, self.n_heads, D // self.n_heads).transpose(1, 2)
+            v = v.view(B, 1, self.n_heads, D // self.n_heads).transpose(1, 2)
+
+            # Apply RoPE transformation
+            q = self.rope(q)
+            k = self.rope(k)
+
+            k = torch.cat((k_cached, k), dim=2)
+            v = torch.cat((v_cached, v), dim=2)
 
         if self.use_torch_dot_product:
-            o = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            if past_kv is None:
+                o = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            else:
+                o = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0, is_causal=False)
         else:
             scores = q @ k.transpose(-2, -1) / math.sqrt(q.shape[-1])
             scores = scores.masked_fill(self.causal_mask[:,:,:T,:T] == 0, -torch.inf)
@@ -62,10 +80,13 @@ class CausalSelfAttention(nn.Module):
                 w = self.attn_dropout(w)
             o = w @ v
 
-        o = o.transpose(1, 2).contiguous().view(B, T, D)
+        if past_kv is None:
+            o = o.transpose(1, 2).contiguous().view(B, T, D)
+        else:
+            o = o.transpose(1, 2).contiguous().view(B, 1, D)
         o = self.resid_dropout(self.projection(o))
 
-        return o
+        return o, (k, v)
 
 def test_attention():
     config = ModelConfig(n_embed=128, n_heads=4, max_seq_len=32, dropout=0.0, bias=True, use_torch_dot_product=False)

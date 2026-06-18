@@ -20,7 +20,8 @@ class GPT2(nn.Module):
 
         # self.lm_head.weight = self.token_embedding.weight
 
-    def forward(self, input_ids, targets=None):
+    def forward(self, input_ids, targets=None, past_kvs=None, return_kv_cache=False):
+        new_kvs = []
         B, T = input_ids.size()
 
         if T > self.config.max_seq_len:
@@ -35,8 +36,10 @@ class GPT2(nn.Module):
         else:
             x = self.dropout(tok_emb)
 
-        for block in self.blocks:
-            x = block(x)
+        for i, block in enumerate(self.blocks):
+            past_kv = past_kvs[i] if past_kvs is not None else None
+            x, new_kv = block(x, past_kv)
+            new_kvs.append(new_kv)
         
         x = self.ln(x)
         logits = self.lm_head(x)
@@ -49,13 +52,23 @@ class GPT2(nn.Module):
                 ignore_index=-1
             )
 
-        return logits, loss
+        if return_kv_cache:
+            ret = logits, loss, new_kvs
+        else:
+            ret = logits, loss
+
+        return ret
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None):
+    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None, use_kv_cache=False):
+        kvs = None
         for _ in range(max_new_tokens):
             idx = idx if idx.shape[1] <= self.config.max_seq_len else idx[:,:self.config.max_seq_len]
-            logits, _ = self.forward(idx)
+            if use_kv_cache:
+                current_idx = idx if kvs is None else idx[:,[-1]]
+                logits, _, kvs = self.forward(current_idx, past_kvs=kvs, return_kv_cache=True)
+            else:
+                logits, _ = self.forward(idx)
             logits = logits[:, -1, :] / temperature             # B, V
 
             if top_k is not None:
