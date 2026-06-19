@@ -188,6 +188,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="train", choices=["train", "eval"])
     parser.add_argument("--log_file", type=str, default=None)
+    parser.add_argument("--plot", action="store_true")
     _add_dataclass_args(parser, ModelConfig)
     _add_dataclass_args(parser, TrainerConfig)
     return parser.parse_args()
@@ -198,8 +199,27 @@ def prepare_configs(args):
     trainer_config = TrainerConfig(**{f.name: args_dict[f.name] for f in dataclasses.fields(TrainerConfig)})
     return model_config, trainer_config
 
+def plot_loss(log_file, out="loss_curve.png"):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    df = pd.read_csv(log_file)
+    plt.figure(figsize=(10, 5))
+    plt.plot(df["step"], df["train_loss"], label="train")
+    plt.plot(df["step"], df["val_loss"], label="val")
+    plt.xlabel("Step")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Curve")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out, dpi=150)
+    print(f"Saved to {out}")
+
 if __name__ == "__main__":
     args = parse_args()
-    model_config, trainer_config = prepare_configs(args)
-    trainer = Trainer(args, trainer_config, model_config)
-    trainer.run()
+    if args.plot:
+        plot_loss(args.log_file)
+    else:
+        model_config, trainer_config = prepare_configs(args)
+        trainer = Trainer(args, trainer_config, model_config)
+        trainer.run()
