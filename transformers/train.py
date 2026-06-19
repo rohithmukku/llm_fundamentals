@@ -4,6 +4,8 @@ import dataclasses
 import urllib.request
 import torch
 import numpy as np
+import csv
+import os
 from torch.utils.data import DataLoader, Dataset
 from gpt2.gpt2 import GPT2
 from torch.optim import AdamW
@@ -77,6 +79,8 @@ class Trainer:
         self.model = GPT2(self.model_config, vocab_size=self.dataloader.dataset.vocab_size)
         self.model.to(self.device)
         if split == "train":
+            val_dataset = ShakespeareDataset(self.model_config.max_seq_len, "val")
+            self.val_dataloader = DataLoader(val_dataset, batch_size=self.trainer_config.batch_size, shuffle=False)
             lr = self.trainer_config.lr
             self.optim = AdamW(self.model.parameters(), lr=lr)
             self.model.train()
@@ -84,6 +88,13 @@ class Trainer:
             self.model.eval()
 
     def train(self):
+        log_file = getattr(self.args, "log_file", None)
+        csv_writer = None
+        if log_file:
+            f = open(log_file, "w", newline="")
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(["step", "train_loss", "val_loss", "lr"])
+
         step = 0
         stop = False
         while not stop:
@@ -101,32 +112,44 @@ class Trainer:
 
                 step += 1
 
-                # adjust learning rate/decay
                 lr = self.trainer_config.lr * 0.5 * (1 + math.cos(math.pi * step / self.trainer_config.steps))
                 for param_group in self.optim.param_groups:
                     param_group['lr'] = lr
 
                 if step % self.trainer_config.log_step == 0:
-                    print(f"Step: {step}, Loss: {loss.item()}")
+                    val_loss = self.eval(self.val_dataloader, max_batches=20)
+                    print(f"Step: {step}, Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}, LR: {lr:.6f}")
+                    if csv_writer:
+                        csv_writer.writerow([step, f"{loss.item():.4f}", f"{val_loss:.4f}", f"{lr:.6f}"])
+                        f.flush()
 
                 if step >= self.trainer_config.steps:
                     stop = True
                     break
+
+        if log_file:
+            f.close()
         self.save_model(step, loss)
 
-    def eval(self):
+    def eval(self, dataloader=None, max_batches=None):
+        dataloader = dataloader or self.dataloader
+        was_training = self.model.training
+        self.model.eval()
         losses = []
         with torch.no_grad():
-            for batch in self.dataloader:
+            for batch in dataloader:
                 x, y = batch
-                x = x.to(self.device)
-                y = y.to(self.device)
-
-                logits, loss = self.model(x, y)
-                losses.append(loss.cpu().item())
-        
-        avg_loss = sum(losses)/len(losses)
-        print(f"Average loss: {avg_loss}")
+                x, y = x.to(self.device), y.to(self.device)
+                _, loss = self.model(x, y)
+                losses.append(loss.item())
+                if max_batches and len(losses) >= max_batches:
+                    break
+        if was_training:
+            self.model.train()
+        avg_loss = sum(losses) / len(losses)
+        if not max_batches:
+            print(f"Average loss: {avg_loss:.4f}")
+        return avg_loss
 
     def run(self):
         self.set_seed()
@@ -136,10 +159,10 @@ class Trainer:
             self.train()
         elif self.args.mode == "eval":
             self.prepare_setup("val")
-            self.eval()
+            self.eval(self.dataloader)
         else:
             self.prepare_setup("test")
-            self.eval()
+            self.eval(self.dataloader)
 
     def save_model(self, step, loss):
         path = "./minigpt.pth"
@@ -164,6 +187,7 @@ def _add_dataclass_args(parser, cls):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="train", choices=["train", "eval"])
+    parser.add_argument("--log_file", type=str, default=None)
     _add_dataclass_args(parser, ModelConfig)
     _add_dataclass_args(parser, TrainerConfig)
     return parser.parse_args()
