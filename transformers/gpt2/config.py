@@ -11,7 +11,7 @@ class TrainerConfig:
 
 @dataclass
 class ModelConfig:
-    n_embed: int = 512
+    n_embed: int = 768
     n_heads: int = 12
     n_layers: int = 12
     max_seq_len: int = 1024

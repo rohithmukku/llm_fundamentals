@@ -141,7 +141,8 @@ class Trainer:
             self.eval(self.dataloader)
 
     def save_model(self, step, loss):
-        path = "./minigpt.pth"
+        out_dir = self.args.out_dir
+        os.makedirs(out_dir, exist_ok=True)
         checkpoint = {
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optim.state_dict(),
@@ -149,8 +150,14 @@ class Trainer:
             "step": step,
             "loss": loss.item(),
         }
-        torch.save(checkpoint, path)
-        print(f"Saved checkpoint to {path} at step {step}")
+        model_path = os.path.join(out_dir, "model.pth")
+        torch.save(checkpoint, model_path)
+        print(f"Saved checkpoint to {model_path} at step {step}")
+        if self.args.tokenizer:
+            import shutil
+            tok_dst = os.path.join(out_dir, "tokenizer.json")
+            shutil.copy(self.args.tokenizer, tok_dst)
+            print(f"Saved tokenizer to {tok_dst}")
 
 
 def _add_dataclass_args(parser, cls):
@@ -165,6 +172,7 @@ def parse_args():
     parser.add_argument("--mode", type=str, default="train", choices=["train", "eval"])
     parser.add_argument("--dataset", type=str, default="shakespeare", choices=["shakespeare", "wikitext"])
     parser.add_argument("--tokenizer", type=str, default=None, help="Path to Tokenizer")
+    parser.add_argument("--out_dir", type=str, default="./output", help="Directory to save model and tokenizer")
     parser.add_argument("--log_file", type=str, default=None)
     parser.add_argument("--plot", action="store_true")
     _add_dataclass_args(parser, ModelConfig)

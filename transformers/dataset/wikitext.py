@@ -32,3 +32,18 @@ class WikiTextDataset(Dataset):
         x = self.data[idx : idx + self.max_seq_len]
         y = self.data[idx + 1 : idx + self.max_seq_len + 1]
         return x, y
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--vocab_size", type=int, default=500)
+    parser.add_argument("--out", type=str, default="tokenizer.json")
+    args = parser.parse_args()
+
+    ds = load_dataset("wikitext", "wikitext-103-raw-v1")
+    text = "\n".join(ds["train"]["text"])
+
+    tok = BPETokenizer()
+    tok.train(text, args.vocab_size)
+    tok.save(args.out)
+    print(f"Tokenizer saved to {args.out} (vocab_size={tok.vocab_size})")
