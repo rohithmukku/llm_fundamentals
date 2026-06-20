@@ -7,7 +7,8 @@ GPT-2 implemented from scratch in PyTorch, trained on TinyShakespeare. No Huggin
 - Decoder-only transformer (GPT-2 style)
 - Causal self-attention with pre-LayerNorm
 - RoPE positional encoding (configurable via `use_rope` flag)
-- Character-level tokenization (vocab size: 65)
+- Character-level tokenization (vocab size: 65) for toy dataset: Shakespeare
+- BPETokenizer and Tiktoken for WikiText
 
 Default small config (~10M params):
 
@@ -30,14 +31,34 @@ Random init baseline: `log(65) ≈ 4.17`. Char-level entropy lower bound: ~1.0.
 
 ## Usage
 
+### TinyShakespeare (char-level, quick)
+
 ```bash
 # Train
-python train.py --n_embed 384 --n_heads 6 --n_layers 6 \
-  --max_seq_len 256 --steps 5000 --batch_size 32
+python train.py --dataset shakespeare --n_embed 384 --n_heads 6 --n_layers 6 \
+  --max_seq_len 256 --steps 5000 --batch_size 32 --log_file training_log.csv
 
 # Eval
-python train.py --mode eval --n_embed 384 --n_heads 6 --n_layers 6 \
+python train.py --mode eval --dataset shakespeare --n_embed 384 --n_heads 6 --n_layers 6 \
   --max_seq_len 256
+
+# Sample
+python sample.py --checkpoint minigpt.pth --prompt "To be or not to be"
+```
+
+### WikiText-103 (BPE, GPT-2 small)
+
+```bash
+# Step 1: train tokenizer (optional — uses tiktoken by default)
+python -m dataset.wikitext --vocab_size 5000 --out tokenizer.json
+
+# Step 2: train model (uses tiktoken by default, pass --tokenizer for custom BPE)
+python train.py --dataset wikitext --n_embed 768 --n_heads 12 --n_layers 12 \
+  --max_seq_len 1024 --steps 10000 --batch_size 12 \
+  --log_file training_log.csv --out_dir ./runs/gpt2s_wikitext
+
+# Step 3: plot loss curve
+python train.py --plot --log_file training_log.csv
 ```
 
 ## KV Cache Benchmark
@@ -67,7 +88,7 @@ Speedup grows with sequence length — consistent with the O(T²) → O(T) reduc
 ## TODO
 
 - [x] RoPE positional encoding
-- [ ] BPE tokenizer
+- [x] BPE tokenizer
 
 ## Structure
 
@@ -79,5 +100,36 @@ gpt2/
   gpt2.py        - Full GPT-2 model
 train.py         - Training loop with cosine decay, char-level dataset
 tokenizer/
-  bpe.py         - BPE tokenizer (in progress)
+  bpe.py         - BPE tokenizer
 ```
+
+## GPT-2 Small Training Results
+
+Trained from scratch on WikiText with the following config:
+- 124M parameters (12 layers, 12 heads, 768 embed dim)
+- BF16 mixed precision + Flash Attention
+- 10,000 steps, batch size 12, seq length 1024
+- AdamW with cosine LR schedule (3e-4 → 0)
+- Trained on A10, ~72 minutes total
+
+### Results
+- Final validation loss: 3.21
+- Validation perplexity: 24.8
+- Reference: published GPT-2 small ~29 perplexity on WikiText-103
+
+## Training Notes
+
+Initial training attempts hit OOM at batch size 8 even with BF16 mixed precision. 
+Investigation revealed that returning KV tensors from attention forward() during 
+training was keeping ~13GB of activations alive unnecessarily (intended for 
+inference KV cache). After fixing this and verifying Flash Attention was engaging,
+trained successfully at batch 12 in ~72 minutes on a single A10 (22GB).
+
+### Memory Optimizations Applied
+- BF16 mixed precision (halves activation memory)
+- F.scaled_dot_product_attention with is_causal=True (Flash Attention)
+- Eliminated KV cache leak in training forward pass
+- Cosine LR schedule
+
+### Loss Curve
+![Loss Curve](artifacts/loss_curve.png)
