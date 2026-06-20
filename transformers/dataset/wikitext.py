@@ -3,16 +3,29 @@ import os
 from torch.utils.data import Dataset
 from datasets import load_dataset
 from tokenizer.bpe import BPETokenizer
+import tiktoken
+
+def get_tokenizer(tokenizer: str = "tiktoken"):
+    # tokenizer can be either tiktoken or path
+    if tokenizer == "tiktoken":
+        enc = tiktoken.get_encoding("gpt2")
+        return enc, enc.n_vocab
+    else:
+        tok = BPETokenizer()
+        tok.load(tokenizer)
+        return tok, tok.vocab_size
 
 class WikiTextDataset(Dataset):
-    def __init__(self, max_seq_len: int, tokenizer: BPETokenizer, split: str = "train") -> None:
+    def __init__(self, max_seq_len: int, tokenizer: str, split: str = "train") -> None:
         split_map = {
             "train": "train",
             "val": "validation",
             "test": "test"
         }
 
-        ds = load_dataset("wikitext", "wikitext-103-raw-v1")
+        self.tokenizer, self.vocab_size = get_tokenizer(tokenizer)
+
+        ds = load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")
         text = "\n".join(ds[split_map[split]]["text"])
 
         # character level tokenization
@@ -20,10 +33,9 @@ class WikiTextDataset(Dataset):
         if os.path.exists(cache_path):
             self.data = torch.load(cache_path)
         else:
-            self.data = torch.tensor(tokenizer.encode(text), dtype=torch.long)
+            self.data = torch.tensor(self.tokenizer.encode(text), dtype=torch.long)
             torch.save(self.data, cache_path)
         self.max_seq_len = max_seq_len
-        self.vocab_size = tokenizer.vocab_size
 
     def __len__(self):
         return len(self.data) - self.max_seq_len
@@ -40,7 +52,7 @@ if __name__ == "__main__":
     parser.add_argument("--out", type=str, default="tokenizer.json")
     args = parser.parse_args()
 
-    ds = load_dataset("wikitext", "wikitext-103-raw-v1")
+    ds = load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")
     text = "\n".join(ds["train"]["text"])
 
     tok = BPETokenizer()

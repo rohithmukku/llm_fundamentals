@@ -11,7 +11,7 @@ from gpt2.gpt2 import GPT2
 from torch.optim import AdamW
 import math
 from dataset import ShakespeareDataset, WikiTextDataset
-from tokenizer.bpe import BPETokenizer 
+
 
 def get_dataset(ds, max_seq_len, tokenizer, split):
     if ds == "shakespeare":
@@ -46,16 +46,14 @@ class Trainer:
             torch.backends.cudnn.deterministic = True
 
     def prepare_setup(self, split="train"):
-        if self.args.tokenizer:
-            self.tokenizer = BPETokenizer()
-            self.tokenizer.load(self.args.tokenizer)
-        self.dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, self.tokenizer, split)
+        tokenizer_arg = self.args.tokenizer or "tiktoken"
+        self.dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, tokenizer_arg, split)
         self.dataloader = DataLoader(self.dataset, batch_size=self.trainer_config.batch_size, shuffle=True)
 
         self.model = GPT2(self.model_config, vocab_size=self.dataloader.dataset.vocab_size)
         self.model.to(self.device)
         if split == "train":
-            val_dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, self.tokenizer, "val")
+            val_dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, tokenizer_arg, "val")
             self.val_dataloader = DataLoader(val_dataset, batch_size=self.trainer_config.batch_size, shuffle=False)
             lr = self.trainer_config.lr
             self.optim = AdamW(self.model.parameters(), lr=lr)
