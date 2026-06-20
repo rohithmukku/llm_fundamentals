@@ -38,7 +38,7 @@ class CausalSelfAttention(nn.Module):
             self.register_buffer("causal_mask", torch.tril(torch.ones(self.max_seq_len, self.max_seq_len)).view(1, 1, self.max_seq_len, self.max_seq_len))
         
 
-    def forward(self, x, past_kv=None):
+    def forward(self, x, past_kv=None, return_kv_cache=False):
         # x: (B, T, D)
         B, T, D = x.size()
 
@@ -86,7 +86,7 @@ class CausalSelfAttention(nn.Module):
             o = o.transpose(1, 2).contiguous().view(B, 1, D)
         o = self.resid_dropout(self.projection(o))
 
-        return o, (k, v)
+        return o, (k, v) if return_kv_cache else None
 
 def test_attention():
     config = ModelConfig(n_embed=128, n_heads=4, max_seq_len=32, dropout=0.0, bias=True, use_torch_dot_product=False)

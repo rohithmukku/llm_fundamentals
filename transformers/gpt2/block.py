@@ -11,8 +11,8 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(config.n_embed, bias=config.bias)
         self.mlp = MLP(config)
 
-    def forward(self, x, past_kv=None):
-        o, kv = self.attention(self.ln_1(x), past_kv)
+    def forward(self, x, past_kv=None, return_kv_cache=False):
+        o, kv = self.attention(self.ln_1(x), past_kv, return_kv_cache)
         x = x + o
         x = x + self.mlp(self.ln_2(x))
 

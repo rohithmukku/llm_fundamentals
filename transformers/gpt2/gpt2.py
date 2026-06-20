@@ -38,7 +38,7 @@ class GPT2(nn.Module):
 
         for i, block in enumerate(self.blocks):
             past_kv = past_kvs[i] if past_kvs is not None else None
-            x, new_kv = block(x, past_kv)
+            x, new_kv = block(x, past_kv, return_kv_cache)
             new_kvs.append(new_kv)
         
         x = self.ln(x)
