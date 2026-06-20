@@ -10,42 +10,14 @@ from torch.utils.data import DataLoader, Dataset
 from gpt2.gpt2 import GPT2
 from torch.optim import AdamW
 import math
+from dataset import ShakespeareDataset, WikiTextDataset
+from tokenizer.bpe import BPETokenizer 
 
-class ShakespeareDataset(Dataset):
-    def __init__(self, max_seq_len, split="train"):
-        url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-        file_path = "tinyshakespeare.txt"
-        urllib.request.urlretrieve(url, file_path)
-
-        with open(file_path, 'r', encoding='utf-8') as f:
-            text = f.read()
-        
-        # character level tokenization
-        self.chars = sorted(set(text))
-        self.vocab_size = len(self.chars)
-        self.char_to_int = {ch: i for i, ch in enumerate(self.chars)}
-        self.int_to_char = {i: ch for i, ch in enumerate(self.chars)}
-        self.max_seq_len = max_seq_len
-
-        data = torch.tensor([self.char_to_int[c] for c in text])
-        n = len(data)
-
-        if split == "train":
-            self.data = data[:int(0.8 * n)]
-        elif split == "val":
-            self.data = data[int(0.8 * n) : int(0.9 * n)]
-        else:
-            self.data = data[int(0.9 * n):]
-        self.len = len(self.data)
-
-    def __len__(self):
-        return len(self.data) - self.max_seq_len
-
-    def __getitem__(self, idx):
-        x = self.data[idx : idx + self.max_seq_len]
-        y = self.data[idx + 1 : idx + self.max_seq_len + 1]
-        return x, y
-        
+def get_dataset(ds, max_seq_len, tokenizer, split):
+    if ds == "shakespeare":
+        return ShakespeareDataset(max_seq_len, split)
+    elif ds == "wikitext":
+        return WikiTextDataset(max_seq_len, tokenizer, split)
 
 class Trainer:
     def __init__(self, args, trainer_config: TrainerConfig, model_config: ModelConfig):
@@ -62,6 +34,7 @@ class Trainer:
         self.dataloader = None
         self.model = None
         self.optim = None
+        self.tokenizer = None
 
     def set_seed(self):
         seed = self.trainer_config.seed
@@ -73,13 +46,16 @@ class Trainer:
             torch.backends.cudnn.deterministic = True
 
     def prepare_setup(self, split="train"):
-        self.dataset = ShakespeareDataset(self.model_config.max_seq_len, split)
+        if self.args.tokenizer:
+            self.tokenizer = BPETokenizer()
+            self.tokenizer.load(self.args.tokenizer)
+        self.dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, self.tokenizer, split)
         self.dataloader = DataLoader(self.dataset, batch_size=self.trainer_config.batch_size, shuffle=True)
 
         self.model = GPT2(self.model_config, vocab_size=self.dataloader.dataset.vocab_size)
         self.model.to(self.device)
         if split == "train":
-            val_dataset = ShakespeareDataset(self.model_config.max_seq_len, "val")
+            val_dataset = get_dataset(self.args.dataset, self.model_config.max_seq_len, self.tokenizer, "val")
             self.val_dataloader = DataLoader(val_dataset, batch_size=self.trainer_config.batch_size, shuffle=False)
             lr = self.trainer_config.lr
             self.optim = AdamW(self.model.parameters(), lr=lr)
@@ -187,6 +163,8 @@ def _add_dataclass_args(parser, cls):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="train", choices=["train", "eval"])
+    parser.add_argument("--dataset", type=str, default="shakespeare", choices=["shakespeare", "wikitext"])
+    parser.add_argument("--tokenizer", type=str, default=None, help="Path to Tokenizer")
     parser.add_argument("--log_file", type=str, default=None)
     parser.add_argument("--plot", action="store_true")
     _add_dataclass_args(parser, ModelConfig)
