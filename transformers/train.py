@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 from gpt2.gpt2 import GPT2
 from torch.optim import AdamW
 import math
+import time
 from dataset import ShakespeareDataset, WikiTextDataset
 
 
@@ -71,6 +72,7 @@ class Trainer:
 
         step = 0
         stop = False
+        t0 = time.perf_counter()
         while not stop:
             for batch in self.dataloader:
                 x, y = batch
@@ -93,7 +95,8 @@ class Trainer:
 
                 if step % self.trainer_config.log_step == 0:
                     val_loss = self.eval(self.val_dataloader, max_batches=20)
-                    print(f"Step: {step}, Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}, LR: {lr:.6f}")
+                    elapsed = time.perf_counter() - t0
+                    print(f"Step: {step}, Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}, LR: {lr:.6f}, Time: {elapsed:.1f}s")
                     if csv_writer:
                         csv_writer.writerow([step, f"{loss.item():.4f}", f"{val_loss:.4f}", f"{lr:.6f}"])
                         f.flush()
@@ -102,6 +105,8 @@ class Trainer:
                     stop = True
                     break
 
+        total_time = time.perf_counter() - t0
+        print(f"Training complete. Total time: {total_time/60:.1f} min ({total_time:.1f}s)")
         if log_file:
             f.close()
         self.save_model(step, loss)
