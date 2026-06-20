@@ -2,3 +2,5 @@ torch
 graphviz
 pytest
 tqdm
+datasets
+tiktoken

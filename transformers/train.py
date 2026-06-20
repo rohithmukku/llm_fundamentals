@@ -77,7 +77,8 @@ class Trainer:
                 x = x.to(self.device)
                 y = y.to(self.device)
 
-                logits, loss = self.model(x, y)
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.device.type != "cpu"):
+                    logits, loss = self.model(x, y)
 
                 self.model.zero_grad()
                 loss.backward()
